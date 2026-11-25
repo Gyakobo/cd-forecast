@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CD-Forecast — Controlled-Drug Consumption Forecast (Nigeria)</title>
+  <meta name="description" content="Forecast future consumption of controlled medicines in Nigeria from the UNODC/FMOH surveys.">
+  <meta name="author" content="Andrew Gyakobo & Mawuli Gyakobo">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="top">
+    <div class="wrap">
+      <div class="brand">
+        <h1>CD-Forecast</h1>
+        <p>Controlled-Drug Consumption Forecast · Nigeria</p>
+      </div>
+      <nav id="tabs" aria-label="Pages">
+        <button data-tab="calc" class="active">Calculator</button>
+        <button data-tab="all">All Drugs</button>
+        <button data-tab="compare">Compare Surveys</button>
+        <button data-tab="records">My Data</button>
+        <button data-tab="incb">INCB Allowances</button>
+        <button data-tab="about">About</button>
+      </nav>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <!-- Shared selection (Calculator + All Drugs) -->
+    <section id="selection" class="panel">
+      <div class="grid">
+        <label>Data source
+          <select id="source">
+            <option value="2019">2019 survey (data 2016–18)</option>
+            <option value="2017">2017 survey (data 2014–16)</option>
+            <option value="records">My Data (your records)</option>
+            <option value="single">Single figure</option>
+          </select>
+        </label>
+        <label class="calc-only">Drug <select id="drug"></select></label>
+        <label>Geopolitical zone <select id="zone"></select></label>
+        <label>State <select id="state"></select></label>
+        <label>Facility type <select id="facilityType"></select></label>
+        <label>Ownership <select id="ownership"><option>All</option><option>Public</option><option>Private</option></select></label>
+        <label class="survey-only">Method
+          <select id="scenario">
+            <option value="1">Survey's main method (state / zone level)</option>
+            <option value="2">National average × facilities</option>
+          </select>
+        </label>
+        <label class="survey-only check"><input type="checkbox" id="adjusted" checked> Correct for stock-outs</label>
+        <label class="records-only">Base year <input type="number" id="recBaseYear" value="2026" min="2000" max="2100"></label>
+      </div>
+      <div class="grid single-only">
+        <label>Base year <input type="number" id="sYear" value="2026"></label>
+        <label>Quantity dispensed (kg) <input type="number" id="sKg" value="2" step="any" min="0"></label>
+        <label>Days in stock (1–365) <input type="number" id="sDays" value="305" min="1" max="365"></label>
+      </div>
+      <details class="assumptions">
+        <summary>Forecast assumptions</summary>
+        <div class="grid">
+          <label>Growth — low (%/yr) <input type="number" id="gLow" value="0" step="0.5"></label>
+          <label>Growth — mid (%/yr) <input type="number" id="gMid" value="2.5" step="0.5"></label>
+          <label>Growth — high (%/yr) <input type="number" id="gHigh" value="5" step="0.5"></label>
+          <label>Safety buffer (%) <input type="number" id="buffer" value="10" step="1" min="0"></label>
+          <label class="calc-only">Need estimate (kg, optional) <input type="number" id="need" step="any" min="0" placeholder="e.g. 1002"></label>
+          <label class="calc-only">Weight on need (%) <input type="number" id="needW" value="0" min="0" max="100" step="5"></label>
+          <label class="all-only">Years ahead for low/mid/high <input type="number" id="yearsAhead" value="5" min="1" max="30"></label>
+        </div>
+      </details>
+      <p id="warning" class="warn" hidden></p>
+    </section>
+
+    <!-- Calculator -->
+    <section id="tab-calc" class="tab">
+      <div class="tiles">
+        <div class="tile"><span class="lbl">Baseline (kg / year)</span><span class="val" id="tBase">–</span><span class="sub" id="tBaseSub"></span></div>
+        <div class="tile"><span class="lbl">Trend over 3 years</span><span class="val" id="tTrend">–</span><span class="sub">sanity check only</span></div>
+        <div class="tile"><span class="lbl">INCB allowance (kg)</span><span class="val" id="tIncb">–</span><span class="sub" id="tIncbSub"></span></div>
+      </div>
+      <div class="two">
+        <div class="panel">
+          <h3>Estimated consumption</h3>
+          <table class="num" id="yearsTable"></table>
+          <p class="note" id="dataNote"></p>
+        </div>
+        <div class="panel chartbox">
+          <h3>Forecast required quantity (kg)</h3>
+          <div id="chart"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="row-head">
+          <h3>Forecast — required quantity (kg, incl. buffer and add-ons)</h3>
+          <button class="ghost" id="dlCalc">Download CSV</button>
+        </div>
+        <table class="num" id="fcTable"></table>
+        <p class="note">Add-on: known extra demand in a year (e.g. a new pain clinic). Q(t) = [(1−w)·B + w·N] · (1+g)<sup>n</sup> · (1+buffer) + add-on(t)</p>
+      </div>
+    </section>
+
+    <!-- All drugs -->
+    <section id="tab-all" class="tab" hidden>
+      <div class="panel">
+        <div class="row-head">
+          <h3>All drugs for this selection</h3>
+          <div>
+            <label class="check inline"><input type="checkbox" id="showEmpty"> Show drugs with no data</label>
+            <button class="ghost" id="dlAll">Download CSV</button>
+          </div>
+        </div>
+        <div class="scroll"><table class="num" id="allTable"></table></div>
+        <p class="note">INCB comparison shows only for national selections. Plans use growth and buffer only; use the Calculator for need blending or add-ons.</p>
+      </div>
+    </section>
+
+    <!-- Compare surveys -->
+    <section id="tab-compare" class="tab" hidden>
+      <div class="panel">
+        <div class="grid">
+          <label>Method
+            <select id="cScenario"><option value="2">National average × facilities</option><option value="1">Survey's main method</option></select>
+          </label>
+          <label class="check"><input type="checkbox" id="cAdjusted" checked> Correct for stock-outs</label>
+          <label class="check"><input type="checkbox" id="cExPPMV" checked> Exclude PPMVs from 2019 (like-for-like)</label>
+        </div>
+        <p class="note">National annual estimates from both surveys. The surveys used different designs, so treat the implied growth with care. The 2016 columns show the one year both surveys measured.</p>
+        <div class="scroll"><table class="num" id="cmpTable"></table></div>
+      </div>
+    </section>
+
+    <!-- My data -->
+    <section id="tab-records" class="tab" hidden>
+      <div class="panel">
+        <h3>Add a record</h3>
+        <p class="note">One row per drug, facility (or group of facilities) and year. Saved in this browser only. Export a CSV to keep or share it.</p>
+        <form id="recForm" class="grid">
+          <label>Year <input name="year" type="number" value="2026" required></label>
+          <label>State <select name="state" id="rState" required></select></label>
+          <label>Facility type <select name="facilityType" id="rType"></select></label>
+          <label>Ownership <select name="ownership"><option>Public</option><option>Private</option></select></label>
+          <label>Drug <select name="drug" id="rDrug"></select></label>
+          <label>Quantity dispensed (kg) <input name="kg" type="number" step="any" min="0" required></label>
+          <label>Days in stock (blank = 365) <input name="days" type="number" min="1" max="365"></label>
+          <label>Facilities represented (blank = 1) <input name="facilities" type="number" step="any" min="0"></label>
+          <button type="submit" class="primary">Add record</button>
+        </form>
+      </div>
+      <div class="panel">
+        <div class="row-head">
+          <h3>Records (<span id="recCount">0</span>)</h3>
+          <div class="btns">
+            <button class="ghost" id="recTemplate">CSV template</button>
+            <label class="ghost file">Import CSV <input type="file" id="recImport" accept=".csv,text/csv" hidden></label>
+            <button class="ghost" id="recExport">Export CSV</button>
+            <button class="ghost danger" id="recClear">Clear all</button>
+          </div>
+        </div>
+        <div class="scroll"><table class="num" id="recTable"></table></div>
+        <p class="note">To forecast from these records, choose <b>My Data</b> as the data source on the Calculator or All Drugs page and set the base year.</p>
+      </div>
+    </section>
+
+    <!-- INCB -->
+    <section id="tab-incb" class="tab" hidden>
+      <div class="panel">
+        <div class="row-head">
+          <h3>INCB allowances (kg per year)</h3>
+          <button class="ghost" id="incbReset">Reset to report values</button>
+        </div>
+        <p class="note">Nigeria's annual estimates confirmed by the International Narcotics Control Board. Defaults are the March 2017 figures used in the report. Edit to update; changes are saved in this browser.</p>
+        <div class="scroll"><table id="incbTable"></table></div>
+      </div>
+    </section>
+
+    <!-- About -->
+    <section id="tab-about" class="tab prose" hidden>
+      <div class="panel">
+        <h2>How CD-Forecast works</h2>
+        <p>CD-Forecast estimates how much of each controlled medicine (opioids, psychotropic substances and precursors) Nigeria will need in future years: nationally, by geopolitical zone, by state, by facility type and by ownership.</p>
+        <h3>The formula</h3>
+        <pre>1. Stock-out correction   B    = D × 365 / A
+2. Need-based blend       M    = (1 − w)·B + w·N
+3. Growth                 M · (1 + g)^n
+4. Required quantity      Q(t) = M · (1 + g)^n · (1 + buffer) + add-on(t)</pre>
+        <p><b>D</b> quantity dispensed in the base year · <b>A</b> days in stock · <b>g</b> yearly growth (low/mid/high) · <b>n</b> years ahead · <b>N</b> need-based estimate · <b>w</b> weight on need · <b>buffer</b> safety mark-up (10% in the report) · <b>add-on</b> known extra demand.</p>
+        <p>Steps 1 and 4 follow the 2017 report (Sections 3.5 and 4.1). Steps 2 and 3 extend it to multi-year forecasting.</p>
+        <h3>Data sources</h3>
+        <ul>
+          <li><b>2017 survey</b> (data 2014–16): all 36 states and FCT. Main method scales each state's sampled facilities to all facilities of that type in the state.</li>
+          <li><b>2019 survey</b> (data 2016–18): states sampled per zone (FCT and Lagos always included), facilities sampled by type, and patent medicine vendors (PPMVs) added. Main method scales by geopolitical zone, so it can be filtered by zone but not by state.</li>
+          <li><b>National average</b> method (both surveys): national average per facility type × national number of that type.</li>
+          <li><b>My Data</b>: your own yearly records, stock-out adjusted and scaled by "facilities represented".</li>
+        </ul>
+        <h3>Caveats</h3>
+        <ul>
+          <li>Survey data ends in 2018. Forecasts far beyond that are illustrative until newer records are added.</li>
+          <li>Three years cannot support a reliable growth rate. Plan to the low–high range, not one number.</li>
+          <li>Consumption-based forecasts repeat past patterns, including under-use (morphine) and possible diversion. Use the need blend where past use is known to be distorted.</li>
+          <li>2019 survey, morphine: a single tertiary-hospital record accounts for about half of the estimate and is under review.</li>
+        </ul>
+        <h3>Acknowledgements</h3>
+        <table id="ackTable"></table>
+        <h3>Data credit</h3>
+        <p>Survey data: UNODC &amp; Federal Ministry of Health, Nigeria. Quantification of Opioid Medicines and Estimation of Psychotropic Substances and Precursors in Nigeria (2017 and 2019 surveys). Only aggregated estimates are included in this application.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap foot">
+    <span>© 2026 Andrew Gyakobo &amp; Mawuli Gyakobo. All rights reserved.</span>
+    <span id="ver">CD-Forecast web · v1.1</span>
+  </footer>
+
+  <div id="tip" class="tip" hidden></div>
+  <script src="js/data.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
